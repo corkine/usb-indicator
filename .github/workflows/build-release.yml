@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $output = "dist/keyboard-indicator-$version-windows-amd64.exe"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$version" -o $output .
+          $hash = (Get-FileHash -Algorithm SHA256 $output).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path -Leaf $output)" | Set-Content -Encoding ascii "dist/SHA256SUMS-$version.txt"
+
+      - name: Upload CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyboard-indicator-${{ steps.version.outputs.version }}-windows-amd64
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ github.ref_name }}' dist/* --verify-tag --generate-notes --title '${{ github.ref_name }}'

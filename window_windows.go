@@ -433,7 +433,8 @@ func selectAndSaveKeyboard() error {
 	if err := registerClass("USBIndicatorSelector", syscall.NewCallback(selectorWndProc), 6); err != nil {
 		return err
 	}
-	hwnd, err := createWindow(0, "USBIndicatorSelector", "USB Keyboard Indicator 设置", wsCaption|wsSysMenu, 200, 200, 760, 480, 0, 0)
+	title := fmt.Sprintf("USB Keyboard Indicator 设置 - %s", version)
+	hwnd, err := createWindow(0, "USBIndicatorSelector", title, wsCaption|wsSysMenu, 200, 200, 760, 480, 0, 0)
 	if err != nil {
 		return err
 	}
@@ -490,6 +491,9 @@ func selectAndSaveKeyboard() error {
 		return err
 	}
 	if _, err = createWindow(0, "STATIC", "px（相对工作区左上角）", wsChild|wsVisible, 342, 345, 180, 24, hwnd, 0); err != nil {
+		return err
+	}
+	if _, err = createWindow(0, "STATIC", "版本："+version, wsChild|wsVisible, 12, 405, 240, 24, hwnd, 0); err != nil {
 		return err
 	}
 	if _, err = createWindow(0, "BUTTON", "保存", wsChild|wsVisible|bsPushButton, 532, 400, 96, 30, hwnd, selectSaveID); err != nil {

@@ -5,5 +5,5 @@ package main
 import "fmt"
 
 func main() {
-	fmt.Println("usb-indicator supports Windows only")
+	fmt.Printf("usb-indicator %s supports Windows only\n", version)
 }

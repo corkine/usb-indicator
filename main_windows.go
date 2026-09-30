@@ -23,6 +23,9 @@ func main() {
 		case "--list":
 			listKeyboards()
 			return
+		case "--version", "-version":
+			fmt.Println(version)
+			return
 		case "--disable":
 			disableIndicator()
 			return

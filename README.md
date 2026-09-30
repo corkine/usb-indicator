@@ -13,6 +13,12 @@ go build -ldflags "-H=windowsgui" -o keyboard-indicator.exe .
 .\keyboard-indicator.exe
 ```
 
+正式构建可以注入版本号，版本会显示在设置窗口中：
+
+```powershell
+go build -ldflags "-H=windowsgui -s -w -X main.version=v0.1.0" -o keyboard-indicator.exe .
+```
+
 首次启动会列出当前枚举到的键盘接口。选择目标 USB 键盘并保存后，程序进入常驻监听。配置保存在：
 
 ```text
@@ -33,12 +39,15 @@ go build -ldflags "-H=windowsgui" -o keyboard-indicator.exe .
 .\keyboard-indicator.exe --disable
 ```
 
-如果要在终端中查看枚举结果，请构建保留控制台的诊断版本：
+查看构建版本（需要保留控制台的诊断构建）：
 
 ```powershell
-go build -o keyboard-indicator-console.exe .
-.\keyboard-indicator-console.exe --list
+.\keyboard-indicator-console.exe --version
 ```
+
+## CI 与发布
+
+仅当推送 `v*` 标签时，GitHub Actions 才会运行测试、静态检查并构建带标签版本的 Windows amd64 程序。推送例如 `v0.1.0` 的标签后，会自动创建 GitHub Release，上传 EXE 和 SHA-256 校验文件。
 
 ## 工作方式
 
