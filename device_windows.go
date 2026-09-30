@@ -4,6 +4,7 @@ package main
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -22,6 +23,22 @@ var keyboardInterfaceGUID = guid{
 	Data3: 0x11d1,
 	Data4: [8]byte{0xbc, 0x8c, 0x00, 0xa0, 0xc9, 0x14, 0x05, 0xdd},
 }
+
+var (
+	mouseInterfaceGUID = guid{
+		Data1: 0x378de44c, Data2: 0x56ef, Data3: 0x11d1,
+		Data4: [8]byte{0xbc, 0x8c, 0x00, 0xa0, 0xc9, 0x14, 0x05, 0xdd},
+	}
+	hidInterfaceGUID = guid{
+		Data1: 0x4d1e55b2, Data2: 0xf16f, Data3: 0x11cf,
+		Data4: [8]byte{0x88, 0xcb, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30},
+	}
+	bluetoothAddressPattern = regexp.MustCompile(`(?i)_([0-9A-F]{12})(?:&|#)`)
+)
+
+const m590BluetoothHardwareID = "VID&02046D_PID&B01B"
+
+var unifyingReceiverProductIDs = []string{"PID_C52B", "PID_C532"}
 
 type deviceInterfaceData struct {
 	Size     uint32
@@ -44,9 +61,9 @@ var (
 	procSetupDiDestroyDeviceInfo   = setupapi.NewProc("SetupDiDestroyDeviceInfoList")
 )
 
-func enumerateKeyboards() ([]string, error) {
+func enumerateDeviceInterfaces(class *guid) ([]string, error) {
 	handle, _, callErr := procSetupDiGetClassDevsW.Call(
-		uintptr(unsafe.Pointer(&keyboardInterfaceGUID)), 0, 0,
+		uintptr(unsafe.Pointer(class)), 0, 0,
 		digcfPresent|digcfDeviceInterface,
 	)
 	if handle == ^uintptr(0) {
@@ -58,7 +75,7 @@ func enumerateKeyboards() ([]string, error) {
 	for index := uint32(0); ; index++ {
 		data := deviceInterfaceData{Size: uint32(unsafe.Sizeof(deviceInterfaceData{}))}
 		ok, _, enumErr := procSetupDiEnumDeviceInterface.Call(
-			handle, 0, uintptr(unsafe.Pointer(&keyboardInterfaceGUID)), uintptr(index),
+			handle, 0, uintptr(unsafe.Pointer(class)), uintptr(index),
 			uintptr(unsafe.Pointer(&data)),
 		)
 		if ok == 0 {
@@ -95,6 +112,10 @@ func enumerateKeyboards() ([]string, error) {
 	return paths, nil
 }
 
+func enumerateKeyboards() ([]string, error) {
+	return enumerateDeviceInterfaces(&keyboardInterfaceGUID)
+}
+
 func keyboardPresent(match string) (bool, error) {
 	paths, err := enumerateKeyboards()
 	if err != nil {
@@ -103,6 +124,83 @@ func keyboardPresent(match string) (bool, error) {
 	match = strings.ToUpper(match)
 	for _, path := range paths {
 		if strings.Contains(strings.ToUpper(path), match) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func mouseChoices() ([]mouseChoice, error) {
+	var choices []mouseChoice
+	seen := make(map[string]bool)
+
+	mice, err := enumerateDeviceInterfaces(&mouseInterfaceGUID)
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range mice {
+		upper := strings.ToUpper(path)
+		if !strings.Contains(upper, m590BluetoothHardwareID) {
+			continue
+		}
+		match := bluetoothAddressPattern.FindStringSubmatch(upper)
+		if len(match) != 2 || seen["bluetooth:"+match[1]] {
+			continue
+		}
+		seen["bluetooth:"+match[1]] = true
+		choices = append(choices, mouseChoice{
+			Mode: "bluetooth", ID: match[1], Slot: 0,
+			Label: "M585/M590（蓝牙 " + match[1] + "）",
+		})
+	}
+
+	hids, err := enumerateDeviceInterfaces(&hidInterfaceGUID)
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range hids {
+		upper := strings.ToUpper(path)
+		if strings.Contains(upper, m590BluetoothHardwareID) {
+			address := bluetoothAddressPattern.FindStringSubmatch(upper)
+			if len(address) == 2 && !seen["bluetooth:"+address[1]] {
+				seen["bluetooth:"+address[1]] = true
+				choices = append(choices, mouseChoice{
+					Mode: "bluetooth", ID: address[1],
+					Label: "M585/M590（蓝牙 " + address[1] + "）",
+				})
+			}
+		}
+		match := stableMatch(upper)
+		if !strings.Contains(upper, "VID_046D") || !containsAny(upper, unifyingReceiverProductIDs) ||
+			seen["unifying:"+match] {
+			continue
+		}
+		seen["unifying:"+match] = true
+		choices = append(choices, mouseChoice{
+			Mode: "unifying", ID: match, Slot: 0,
+			Label: "Logitech Unifying 接收器（自动检测在线设备槽）",
+		})
+	}
+	return choices, nil
+}
+
+func containsAny(value string, candidates []string) bool {
+	for _, candidate := range candidates {
+		if strings.Contains(value, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func bluetoothMousePresent(address string) (bool, error) {
+	paths, err := enumerateDeviceInterfaces(&mouseInterfaceGUID)
+	if err != nil {
+		return false, err
+	}
+	address = strings.ToUpper(strings.TrimSpace(address))
+	for _, path := range paths {
+		if strings.Contains(strings.ToUpper(path), address) {
 			return true, nil
 		}
 	}
@@ -122,7 +220,7 @@ func keyboardChoices() ([]keyboardChoice, error) {
 			continue
 		}
 		seen[match] = true
-		choices = append(choices, keyboardChoice{Match: match, Path: path})
+		choices = append(choices, keyboardChoice{MatchRule: match, Path: path})
 	}
 	return choices, nil
 }

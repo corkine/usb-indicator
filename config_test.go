@@ -25,9 +25,39 @@ func TestConfigPathUsesLocalAppData(t *testing.T) {
 }
 
 func TestNormalizeConfigDefaults(t *testing.T) {
-	cfg := config{Match: "VID_1234&PID_5678", OffsetX: -1, OffsetY: maxOffset + 1}
+	cfg := config{KeyboardMatch: "VID_1234&PID_5678", OffsetX: -1, OffsetY: maxOffset + 1}
 	normalizeConfig(&cfg)
-	if cfg.Position != defaultPosition || cfg.Size != defaultSize || cfg.OffsetX != defaultOffset || cfg.OffsetY != defaultOffset {
+	if cfg.Position != defaultPosition || cfg.Size != defaultSize || cfg.OffsetX != defaultOffset || cfg.OffsetY != defaultOffset || cfg.PollInterval != defaultPollMS {
 		t.Fatalf("normalizeConfig() = %+v", cfg)
+	}
+}
+
+func TestNormalizeConfigPollInterval(t *testing.T) {
+	for _, interval := range validPollIntervals {
+		cfg := config{PollInterval: interval}
+		normalizeConfig(&cfg)
+		if cfg.PollInterval != interval {
+			t.Fatalf("normalizeConfig() interval = %d, want %d", cfg.PollInterval, interval)
+		}
+	}
+
+	cfg := config{PollInterval: 123}
+	normalizeConfig(&cfg)
+	if cfg.PollInterval != defaultPollMS {
+		t.Fatalf("normalizeConfig() invalid interval = %d, want %d", cfg.PollInterval, defaultPollMS)
+	}
+}
+
+func TestNormalizeConfigMouse(t *testing.T) {
+	cfg := config{MouseMode: " BLUETOOTH ", MouseID: "c5f631a98e2a"}
+	normalizeConfig(&cfg)
+	if cfg.MouseMode != "bluetooth" || cfg.MouseID != "C5F631A98E2A" {
+		t.Fatalf("normalizeConfig() mouse = %q/%q", cfg.MouseMode, cfg.MouseID)
+	}
+
+	cfg = config{MouseMode: "unifying", MouseID: "vid_046d&pid_c52b", MouseSlot: 9}
+	normalizeConfig(&cfg)
+	if cfg.MouseSlot != 0 {
+		t.Fatalf("normalizeConfig() slot = %d, want 0", cfg.MouseSlot)
 	}
 }

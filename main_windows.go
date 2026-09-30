@@ -11,8 +11,15 @@ import (
 )
 
 type keyboardChoice struct {
-	Match string
-	Path  string
+	MatchRule string
+	Path      string
+}
+
+type mouseChoice struct {
+	Mode  string
+	ID    string
+	Slot  int
+	Label string
 }
 
 func main() {
@@ -23,6 +30,12 @@ func main() {
 		case "--list":
 			listKeyboards()
 			return
+		case "--list-mice":
+			listMice()
+			return
+		case "--debug-unifying":
+			debugUnifying()
+			return
 		case "--version", "-version":
 			fmt.Println(version)
 			return
@@ -30,7 +43,7 @@ func main() {
 			disableIndicator()
 			return
 		case "--select", "--settings":
-			if err := selectAndSaveKeyboard(); err != nil {
+			if err := selectAndSaveDevices(); err != nil {
 				if !errors.Is(err, errSelectionCancelled) {
 					showError(err)
 				}
@@ -53,7 +66,7 @@ func main() {
 
 	cfg, err := loadConfig()
 	if err != nil {
-		if err := selectAndSaveKeyboard(); err != nil {
+		if err := selectAndSaveDevices(); err != nil {
 			if !errors.Is(err, errSelectionCancelled) {
 				showError(err)
 			}
@@ -70,6 +83,53 @@ func main() {
 	}
 }
 
+func debugUnifying() {
+	hidppDebug = true
+	choices, err := mouseChoices()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	for _, choice := range choices {
+		if choice.Mode != "unifying" {
+			continue
+		}
+		fmt.Printf("receiver=%s\n", choice.ID)
+		slot, deviceInfo, queryErr := queryUnifyingConnection(choice.ID)
+		fmt.Printf(
+			"connection-query slot=%d device-info=0x%02X mouse-link=%t err=%v\n",
+			slot, deviceInfo, unifyingMouseLinkEstablished(deviceInfo), queryErr,
+		)
+	}
+}
+
+func listMice() {
+	choices, err := mouseChoices()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	for i, choice := range choices {
+		state := "unknown"
+		if choice.Mode == "bluetooth" {
+			connected, statusErr := bluetoothMousePresent(choice.ID)
+			if statusErr == nil {
+				state = fmt.Sprintf("connected=%t", connected)
+			} else {
+				state = statusErr.Error()
+			}
+		} else if choice.Mode == "unifying" {
+			connected, statusErr := unifyingMousePresent(choice.ID, choice.Slot, defaultPollMS)
+			if statusErr == nil {
+				state = fmt.Sprintf("connected=%t", connected)
+			} else {
+				state = statusErr.Error()
+			}
+		}
+		fmt.Printf("[%d] %s mode=%s id=%s slot=%d %s\n", i+1, choice.Label, choice.Mode, choice.ID, choice.Slot, state)
+	}
+}
+
 func listKeyboards() {
 	choices, err := keyboardChoices()
 	if err != nil {
@@ -77,6 +137,6 @@ func listKeyboards() {
 		return
 	}
 	for i, choice := range choices {
-		fmt.Printf("[%d] %s\n    %s\n", i+1, choice.Match, choice.Path)
+		fmt.Printf("[%d] %s\n    %s\n", i+1, choice.MatchRule, choice.Path)
 	}
 }

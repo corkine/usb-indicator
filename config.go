@@ -10,11 +10,17 @@ import (
 )
 
 type config struct {
-	Match    string `json:"match"`
-	Position string `json:"position"`
-	Size     int    `json:"size"`
-	OffsetX  int    `json:"offset_x"`
-	OffsetY  int    `json:"offset_y"`
+	// Keep the legacy JSON key so the original keyboard-only build can still
+	// read configs saved by the local keyboard-and-mouse build.
+	KeyboardMatch string `json:"match"`
+	MouseMode     string `json:"mouse_mode,omitempty"`
+	MouseID       string `json:"mouse_id,omitempty"`
+	MouseSlot     int    `json:"mouse_slot,omitempty"`
+	PollInterval  int    `json:"poll_interval_ms,omitempty"`
+	Position      string `json:"position"`
+	Size          int    `json:"size"`
+	OffsetX       int    `json:"offset_x"`
+	OffsetY       int    `json:"offset_y"`
 }
 
 const (
@@ -24,7 +30,10 @@ const (
 	maxSize         = 128
 	defaultOffset   = 12
 	maxOffset       = 10000
+	defaultPollMS   = 200
 )
+
+var validPollIntervals = []int{100, 200, 500}
 
 var validPositions = []string{
 	"top-left", "top-center", "top-right",
@@ -60,8 +69,8 @@ func loadConfig() (config, error) {
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		return config{}, err
 	}
-	cfg.Match = strings.ToUpper(strings.TrimSpace(cfg.Match))
-	if cfg.Match == "" {
+	cfg.KeyboardMatch = strings.ToUpper(strings.TrimSpace(cfg.KeyboardMatch))
+	if cfg.KeyboardMatch == "" {
 		return config{}, errors.New("empty keyboard match rule")
 	}
 	normalizeConfig(&cfg)
@@ -76,7 +85,7 @@ func saveConfig(cfg config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	cfg.Match = strings.ToUpper(strings.TrimSpace(cfg.Match))
+	cfg.KeyboardMatch = strings.ToUpper(strings.TrimSpace(cfg.KeyboardMatch))
 	normalizeConfig(&cfg)
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -87,6 +96,20 @@ func saveConfig(cfg config) error {
 }
 
 func normalizeConfig(cfg *config) {
+	cfg.KeyboardMatch = strings.ToUpper(strings.TrimSpace(cfg.KeyboardMatch))
+	cfg.MouseMode = strings.ToLower(strings.TrimSpace(cfg.MouseMode))
+	cfg.MouseID = strings.ToUpper(strings.TrimSpace(cfg.MouseID))
+	if cfg.MouseMode != "bluetooth" && cfg.MouseMode != "unifying" {
+		cfg.MouseMode = ""
+		cfg.MouseID = ""
+		cfg.MouseSlot = 0
+	}
+	if cfg.MouseMode == "unifying" && (cfg.MouseSlot < 0 || cfg.MouseSlot > 6) {
+		cfg.MouseSlot = 0
+	}
+	if !isValidPollInterval(cfg.PollInterval) {
+		cfg.PollInterval = defaultPollMS
+	}
 	cfg.Position = strings.ToLower(strings.TrimSpace(cfg.Position))
 	if !isValidPosition(cfg.Position) {
 		cfg.Position = defaultPosition
@@ -100,6 +123,15 @@ func normalizeConfig(cfg *config) {
 	if cfg.OffsetY < 0 || cfg.OffsetY > maxOffset {
 		cfg.OffsetY = defaultOffset
 	}
+}
+
+func isValidPollInterval(interval int) bool {
+	for _, candidate := range validPollIntervals {
+		if interval == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func isValidPosition(position string) bool {
