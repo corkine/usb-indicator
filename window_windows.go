@@ -275,6 +275,8 @@ func indicatorWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uint
 			procKillTimer.Call(hwnd, indicatorEventTimer)
 			procSetTimer.Call(hwnd, indicatorEventTimer, 200, 0)
 		} else if wParam == dbtDeviceArrival {
+			// Best-effort only: this is not what bounds arrival latency, since
+			// the 100ms poll usually shows the dot sooner than this fires.
 			procKillTimer.Call(hwnd, indicatorEventTimer)
 			procSetTimer.Call(hwnd, indicatorEventTimer, 350, 0)
 		}
@@ -346,8 +348,12 @@ func refreshIndicator(hwnd uintptr) {
 		procShowWindow.Call(hwnd, swHide)
 	}
 
-	// Device notifications are not reliable for every switcher/driver pair.
-	// Poll aggressively only while visible, where removal latency matters.
+	// Device notifications arrive with unbounded, unpredictable latency, so
+	// polling is what actually bounds the indicator's update latency. The
+	// interval is kept at 100ms in both states: while hidden we still need to
+	// notice a re-plug (arrival notifications are unreliable too), and while
+	// visible we need to notice removal promptly. Device notifications are
+	// only a bonus when they happen to arrive within that window.
 	interval := uintptr(pollWhenAbsentMS)
 	if present {
 		interval = pollWhenPresentMS

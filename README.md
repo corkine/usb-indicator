@@ -54,7 +54,7 @@ go build -ldflags "-H=windowsgui -s -w -X main.version=v0.1.0" -o keyboard-indic
 - 用 `RegisterDeviceNotification` 订阅键盘设备接口的到达/移除通知。
 - 收到目标键盘的移除通知后立即隐藏圆点；随后通过 SetupAPI 延迟重检，校验最终状态。
 - 收到设备到达通知后等待 Windows 完成枚举，再显示圆点。
-- 设备通知不可靠时由轮询兜底：无论显示或隐藏状态均每 100ms 检查。
+- 设备通知的延迟无界且不确定，因此由 100ms 轮询提供有界延迟上限：无论显示或隐藏状态均每 100ms 检查一次。设备通知只在及时到达时作为加速，轮询才是决定更新延迟上限的机制。
 - 默认从所选设备路径提取 `VID_xxxx&PID_yyyy` 作为稳定匹配规则。
 - 窗口使用 `TOPMOST / TOOLWINDOW / NOACTIVATE / TRANSPARENT` 扩展样式。
 
